@@ -83,10 +83,14 @@ def accuracy(predictions, labels):
 train_subset = 10000
 
 batch_size = 128
-hiddenlayer_num = 1024
+hiddenlayer_num1 = 1024
+hiddenlayer_num2 = 300
+hiddenlayer_num3 = 50
 
-lam1 = .001/2
-lam2 = .001/2
+lam1 = .001/3
+lam2 = .001/3
+lam3 = .001/3
+lam4 = .001/3
 
 graph = tf.Graph()
 with graph.as_default():
@@ -102,7 +106,7 @@ with graph.as_default():
   # Decay learning
   global_step = tf.Variable(0, trainable=False)
   starter_learning_rate = 0.5
-  end_learning_rate = 0.01
+  end_learning_rate = 0.05
   decay_steps = 10000
   learning_rate = tf.train.polynomial_decay(starter_learning_rate, global_step,
                                               decay_steps, end_learning_rate,
@@ -110,27 +114,37 @@ with graph.as_default():
   
   # Variables.
   weights1 = tf.Variable(
-    tf.truncated_normal([image_size * image_size, hiddenlayer_num],stddev=.12))
+    tf.truncated_normal([image_size * image_size, hiddenlayer_num1],stddev=.12))
   weights2 = tf.Variable(
-    tf.truncated_normal([hiddenlayer_num, num_labels],stddev=.12))
-  biases1 = tf.Variable(tf.ones([hiddenlayer_num]))
-  biases2 = tf.Variable(tf.ones([num_labels]))
+    tf.truncated_normal([hiddenlayer_num1, hiddenlayer_num2],stddev=.12))
+  weights3 = tf.Variable(
+    tf.truncated_normal([hiddenlayer_num2, hiddenlayer_num3],stddev=.12))
+  weights4 = tf.Variable(
+    tf.truncated_normal([hiddenlayer_num3, num_labels],stddev=.12))
+  
+  biases1 = tf.Variable(tf.ones([hiddenlayer_num1]))
+  biases2 = tf.Variable(tf.ones([hiddenlayer_num2]))
+  biases3 = tf.Variable(tf.ones([hiddenlayer_num3]))
+  biases4 = tf.Variable(tf.ones([num_labels]))
   
   # Training computation.
   logits1 = tf.exp(-tf.square(tf.matmul(tf_train_dataset, weights1) + biases1))
-  logits2 = tf.matmul(logits1, weights2) + biases2
+  logits2 = tf.exp(-tf.square(tf.matmul(logits1, weights2) + biases2))
+  logits3 = tf.exp(-tf.square(tf.matmul(logits2, weights3) + biases3))
+  logits4 = tf.matmul(logits3, weights4) + biases4
+  
   loss = tf.reduce_mean(
-    tf.nn.softmax_cross_entropy_with_logits(labels=tf_train_labels, logits=logits2))
-  loss = loss + lam1 * tf.nn.l2_loss(weights1) + lam2 * tf.nn.l2_loss(weights2)
+    tf.nn.softmax_cross_entropy_with_logits(labels=tf_train_labels, logits=logits4))
+  loss = loss + lam1 * tf.nn.l2_loss(weights1) + lam2 * tf.nn.l2_loss(weights2) + lam3 * tf.nn.l2_loss(weights3) + lam4 * tf.nn.l2_loss(weights4)
   # Optimizer.
   optimizer = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss,global_step=global_step)
   
   # Predictions for the training, validation, and test data.
-  train_prediction = tf.nn.softmax(logits2)
+  train_prediction = tf.nn.softmax(logits4)
   valid_prediction = tf.nn.softmax(
-    tf.matmul(tf.exp(-tf.square(tf.matmul(tf_valid_dataset, weights1) + biases1)), weights2) + biases2)
-  test_prediction = tf.nn.softmax(tf.matmul(tf.exp(-tf.square(tf.matmul(tf_test_dataset, weights1) + biases1)), weights2) + biases2)
-
+    tf.matmul(tf.exp(-tf.square(tf.matmul(tf.exp(-tf.square(tf.matmul(tf.exp(-tf.square(tf.matmul(tf_valid_dataset, weights1) + biases1)), weights2) + biases2)), weights3) + biases3)),weights4)+biases4)
+  test_prediction = tf.nn.softmax(tf.matmul(tf.exp(-tf.square(tf.matmul(tf.exp(-tf.square(tf.matmul(tf.exp(-tf.square(tf.matmul(tf_test_dataset, weights1) + biases1)), weights2) + biases2)), weights3) + biases3)),weights4)+biases4)
+#########################################################
 num_steps = 10001
 
 with tf.Session(graph=graph) as session:
@@ -155,3 +169,5 @@ with tf.Session(graph=graph) as session:
       print("Validation accuracy: %.1f%%" % accuracy(
         valid_prediction.eval(), valid_labels))
   print("Test accuracy: %.1f%%" % accuracy(test_prediction.eval(), test_labels))
+
+# ---
